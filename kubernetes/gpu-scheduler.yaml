@@ -1,0 +1,204 @@
+# kubernetes/gpu-scheduler.yaml
+---
+# Node Feature Discovery for GPU detection
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-gpu-node-feature-discovery
+  namespace: kube-system
+  labels:
+    app: nvidia-gpu-node-feature-discovery
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-gpu-node-feature-discovery
+  template:
+    metadata:
+      labels:
+        app: nvidia-gpu-node-feature-discovery
+    spec:
+      hostNetwork: true
+      containers:
+      - name: node-feature-discovery
+        image: nvidia/k8s-device-plugin:v0.13.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+          # Detect NVIDIA GPUs
+          if lspci | grep -i nvidia > /dev/null 2>&1; then
+            echo "NVIDIA GPU detected"
+            nvidia-smi -L
+          else
+            echo "No NVIDIA GPU detected"
+          fi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+      volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
+      nodeSelector:
+        accelerator: nvidia-gpu
+---
+# NVIDIA Device Plugin
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: nvidia-device-plugin-ds
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: nvidia-device-plugin-ds
+    spec:
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - image: nvcr.io/nvidia/k8s-device-plugin:v0.13.0
+        name: nvidia-device-plugin-ctr
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: device-plugin
+          mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+      - name: device-plugin
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      nodeSelector:
+        accelerator: nvidia-gpu
+---
+# GPU Time Slicing configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-slicing-config
+  namespace: kube-system
+data:
+  tesla-t4: |-
+    version: v1
+    sharing:
+      timeSlicing:
+        resources:
+        - name: nvidia.com/gpu
+          replicas: 4  # Allow 4 containers to share 1 GPU
+  a100: |-
+    version: v1
+    sharing:
+      timeSlicing:
+        resources:
+        - name: nvidia.com/gpu
+          replicas: 2  # Allow 2 containers to share 1 A100
+---
+# Node labeling for GPU nodes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-node-labels
+  namespace: kube-system
+data:
+  labels.cfg: |
+    accelerator=nvidia-gpu
+    gpu-type=tesla-t4
+    gpu-count=4
+    cuda-version=12.1
+---
+# Priority Class for GPU workloads
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for GPU workloads"
+preemptionPolicy: PreemptLowerPriority
+---
+# Resource quota for GPU
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu-quota
+  namespace: robot-vision
+spec:
+  hard:
+    requests.nvidia.com/gpu: "8"
+    limits.nvidia.com/gpu: "8"
+    requests.cpu: "16"
+    limits.cpu: "32"
+    requests.memory: "64Gi"
+    limits.memory: "128Gi"
+---
+# Pod Disruption Budget for inference pods
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vision-inference-pdb
+  namespace: robot-vision
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: vision-inference
+      component: detector
+---
+# Network Policy for GPU communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-communication-policy
+  namespace: robot-vision
+spec:
+  podSelector:
+    matchLabels:
+      app: vision-inference
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vision-inference
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 50051
+    - protocol: TCP
+      port: 9090
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: vision-redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090

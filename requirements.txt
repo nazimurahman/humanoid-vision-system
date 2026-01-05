@@ -1,0 +1,64 @@
+# Core Dependencies
+torch==2.0.1
+torchvision==0.15.2
+numpy==1.24.3
+opencv-python==4.8.0.74
+Pillow==10.0.0
+
+# Machine Learning
+scikit-learn==1.3.0
+scipy==1.11.2
+pandas==2.0.3
+
+# Vision & Image Processing
+albumentations==1.3.1
+imageio==2.31.2
+matplotlib==3.7.2
+seaborn==0.12.2
+
+# Web & API
+fastapi==0.100.0
+uvicorn[standard]==0.23.2
+grpcio==1.57.0
+grpcio-tools==1.57.0
+protobuf==4.24.2
+requests==2.31.0
+python-multipart==0.0.6
+
+# Deployment & Containerization
+docker==6.1.3
+kubernetes==26.1.0
+boto3==1.28.57  # For cloud storage
+
+# Configuration
+pyyaml==6.0
+hydra-core==1.3.2
+omegaconf==2.3.0
+
+# Monitoring & Logging
+wandb==0.15.9
+tensorboard==2.13.0
+prometheus-client==0.17.1
+structlog==23.1.0
+
+# Testing
+pytest==7.4.2
+pytest-cov==4.1.0
+pytest-xdist==3.3.1
+pytest-asyncio==0.21.0
+
+# Code Quality
+black==23.7.0
+isort==5.12.0
+mypy==1.5.0
+pylint==2.17.5
+flake8==6.0.0
+bandit==1.7.5
+pre-commit==3.3.3
+
+# Utilities
+tqdm==4.65.0
+pyarrow==13.0.0  # For efficient data loading
+fsspec==2023.6.0  # For remote filesystems
+python-dotenv==1.0.0
+typing-extensions==4.7.1

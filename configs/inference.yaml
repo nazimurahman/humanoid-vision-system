@@ -1,0 +1,272 @@
+# configs/inference.yaml
+# Inference-specific configuration
+
+# Model Loading
+model:
+  checkpoint_path: "${paths.models_dir}/best_model.pt"
+  format: "torchscript"  # pytorch, torchscript, onnx, tensorrt
+  device: "${hardware.device}"
+  
+  # Model warmup
+  warmup_enabled: true
+  warmup_iterations: 100
+  warmup_input_shape: [1, 3, 416, 416]
+  
+# Inference Settings
+inference:
+  batch_size: 1  # For real-time, typically 1
+  max_batch_size: 16  # For batch processing
+  num_warmup_runs: 10
+  num_test_runs: 100
+  
+  # Thread management
+  inference_threads: 1
+  intra_op_threads: 1
+  inter_op_threads: 1
+  
+# Preprocessing Pipeline
+preprocessing:
+  resize:
+    method: "bilinear"  # bilinear, bicubic, area
+    keep_aspect_ratio: false
+    padding: "constant"  # constant, edge, reflect
+    
+  normalization:
+    mean: "${model.normalization.mean}"
+    std: "${model.normalization.std}"
+    
+  color_space: "RGB"  # RGB, BGR, YUV, LAB
+    
+  # Optional preprocessing steps
+  histogram_equalization: false
+  gamma_correction: false
+  sharpening: false
+  
+# Postprocessing Pipeline
+postprocessing:
+  detection:
+    confidence_threshold: 0.25
+    nms_threshold: 0.45
+    max_detections: 300
+    nms_type: "standard"  # standard, soft, fast
+    
+  # Bounding box format conversion
+  box_format: "xywh"  # xywh, xyxy, cxcywh
+  normalized: true
+    
+  # Optional postprocessing
+  tracking:
+    enabled: false
+    type: "kalman"  # kalman, sort, deepsort
+    
+  filtering:
+    min_area: 10  # pixels
+    max_aspect_ratio: 10.0
+    min_confidence: 0.1
+    
+# Performance Optimization
+performance:
+  use_fp16: true  # Half precision inference
+  use_tf32: true  # TensorFloat-32
+  use_cudnn: true
+  cudnn_benchmark: false  # Disable for fixed input size
+  
+  # Memory optimization
+  memory_pool:
+    enabled: true
+    max_reserved_memory: 0.5  # Fraction of total memory
+    allocation_interval: 100
+    
+  # Kernel optimization
+  kernel_fusion: true
+  graph_optimization: true
+  
+# Real-time Settings
+realtime:
+  target_fps: 30
+  max_latency_ms: 100
+  jitter_buffer_ms: 33
+  drop_frames_on_overload: true
+  
+  # Quality adaptation
+  adaptive_quality:
+    enabled: true
+    min_resolution: [320, 320]
+    max_resolution: [1024, 1024]
+    quality_levels: 5
+    
+# Streaming Configuration
+streaming:
+  enabled: true
+  source_type: "camera"  # camera, video, rtsp, image_sequence
+  buffer_size: 30  # Frames
+  drop_strategy: "oldest"  # oldest, newest
+  
+  # Camera settings (override per robot)
+  camera:
+    index: 0
+    width: 1920
+    height: 1080
+    fps: 30
+    format: "MJPG"
+    
+  # RTSP settings
+  rtsp:
+    reconnect_attempts: 3
+    reconnect_delay: 5
+    buffer_size_mb: 10
+    
+# Output Configuration
+output:
+  visualization:
+    enabled: true
+    show_confidence: true
+    show_class_names: true
+    show_tracking_ids: false
+    color_palette: "coco"  # coco, rainbow, random
+    
+    # Drawing settings
+    box_thickness: 2
+    text_size: 0.5
+    text_thickness: 1
+    alpha: 0.5  # Transparency
+    
+  saving:
+    enabled: false
+    format: "json"  # json, xml, yolo, coco
+    output_dir: "inference_results"
+    save_images: false
+    save_videos: false
+    
+  streaming:
+    enabled: false
+    protocol: "http"  # http, rtmp, rtsp
+    port: 8080
+    quality: 80  # JPEG quality
+    
+# API Server Configuration
+api:
+  enabled: true
+  framework: "fastapi"  # fastapi, flask, grpc
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  
+  # REST API endpoints
+  endpoints:
+    detect: "/detect"
+    detect_batch: "/detect/batch"
+    health: "/health"
+    metrics: "/metrics"
+    config: "/config"
+    
+  # Authentication
+  authentication:
+    enabled: false
+    api_key_header: "X-API-Key"
+    
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst_limit: 10
+    
+# gRPC Configuration (for robot communication)
+grpc:
+  enabled: true
+  host: "0.0.0.0"
+  port: 50051
+  max_workers: 10
+  max_message_size: 10485760  # 10MB
+  
+  # Compression
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+    
+# Health Monitoring
+health:
+  check_interval: 30  # seconds
+  memory_threshold: 0.9  # Alert if >90% memory used
+  gpu_threshold: 0.85   # Alert if >85% GPU memory used
+  temperature_threshold: 85  # Celsius
+  
+  # Health check endpoints
+  endpoints:
+    model: "/health/model"
+    gpu: "/health/gpu"
+    memory: "/health/memory"
+    latency: "/health/latency"
+    
+# Metrics Collection
+metrics:
+  enabled: true
+  export_interval: 60  # seconds
+  
+  prometheus:
+    enabled: true
+    port: 9090
+    
+  # Metrics to collect
+  collect:
+    - "inference_latency"
+    - "inference_throughput"
+    - "memory_usage"
+    - "gpu_utilization"
+    - "batch_processing_time"
+    - "detection_count"
+    - "confidence_distribution"
+    
+# Logging for Inference
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "${paths.logs_dir}/inference.log"
+  
+  # Performance logging
+  log_latency: true
+  log_throughput: true
+  log_memory: true
+  
+# Error Handling
+error_handling:
+  max_retries: 3
+  retry_delay: 1  # seconds
+  fallback_model: null
+  
+  # Input validation
+  validate_input: true
+  max_image_size: [3840, 2160]  # 4K
+  max_batch_images: 100
+  
+# Security
+security:
+  input_validation: true
+  max_request_size: 10485760  # 10MB
+  allowed_mime_types: ["image/jpeg", "image/png", "image/bmp"]
+  
+  # Model protection
+  model_encryption: false
+  signature_verification: true
+  
+# Robot Interface
+robot_interface:
+  enabled: true
+  protocol: "ros2"  # ros2, ros1, custom
+  
+  ros2:
+    namespace: "/vision"
+    topics:
+      image: "/camera/image_raw"
+      detections: "/vision/detections"
+      commands: "/vision/commands"
+      
+  # Message formats
+  detection_message:
+    format: "bounding_boxes"  # bounding_boxes, masks, keypoints
+    include_features: true
+    include_timestamps: true
+    
+# Deployment Mode
+deployment_mode: "edge"  # edge, cloud, hybrid

@@ -1,0 +1,141 @@
+# configs/base.yaml
+# Base configuration for Humanoid Vision System
+# This file contains fundamental settings used across all modules
+
+# System Configuration
+system:
+  name: "HumanoidVisionSystem"
+  version: "1.0.0"
+  environment: "production"  # development, staging, production
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+# Hardware Settings
+hardware:
+  device: "auto"  # auto, cuda, cpu, mps (Apple Silicon)
+  cuda_device: 0  # GPU device ID
+  num_workers: 4  # DataLoader workers
+  pin_memory: true  # Pin memory for faster transfer
+  deterministic: true  # Reproducible results
+  
+# Model Architecture
+model:
+  type: "hybrid"  # hybrid, cnn_only, vit_only
+  input_channels: 3  # RGB images
+  input_height: 416  # Model input height
+  input_width: 416   # Model input width
+  normalization:
+    mean: [0.485, 0.456, 0.406]  # ImageNet mean
+    std: [0.229, 0.224, 0.225]   # ImageNet std
+    
+# Manifold Hyper-Connection (mHC) Parameters
+mhc:
+  enabled: true
+  expansion_rate: 4  # Expansion factor for MHC layers
+  sk_iterations: 20  # Sinkhorn-Knopp iterations
+  initialization_alpha: 0.01  # Small initialization
+  
+  # Stability monitoring
+  monitor_eigenvalues: true
+  monitor_gradient_norms: true
+  signal_ratio_threshold: 5.0  # Alert if signal grows >5x
+  
+# Feature Pyramid Network
+fpn:
+  enabled: true
+  channels: [256, 512, 1024]  # Small, medium, large scales
+  use_separable_conv: true  # Depthwise separable for efficiency
+  
+# Vision Transformer
+vit:
+  enabled: true
+  patch_size: 16
+  embedding_dim: 256
+  depth: 6  # Number of transformer layers
+  num_heads: 8
+  mlp_ratio: 4.0
+  dropout: 0.1
+  attention_dropout: 0.1
+  
+# RAG Module (Retrieval Augmented Generation)
+rag:
+  enabled: false  # Optional for production
+  knowledge_dim: 512
+  num_retrievals: 5
+  knowledge_base_path: "data/knowledge_base.json"
+  
+# Detection Head
+detection:
+  num_classes: 80  # COCO dataset
+  anchors:  # YOLO-style anchors (width, height)
+    small: [[10, 13], [16, 30], [33, 23]]   # For 52x52 grid
+    medium: [[30, 61], [62, 45], [59, 119]]  # For 26x26 grid
+    large: [[116, 90], [156, 198], [373, 326]]  # For 13x13 grid
+    
+# Data Augmentation (Common)
+augmentation:
+  basic:
+    hflip_prob: 0.5
+    vflip_prob: 0.0
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.1
+    random_crop:
+      enabled: true
+      min_scale: 0.8
+      max_scale: 1.2
+      
+# Performance Optimization
+optimization:
+  use_amp: true  # Automatic Mixed Precision
+  gradient_checkpointing: false  # Memory efficient
+  tf32_enabled: true  # TensorFloat-32 for Ampere+
+  cudnn_benchmark: true  # Auto-tune convolution algorithms
+  
+# Monitoring and Logging
+monitoring:
+  metrics:
+    - "loss"
+    - "accuracy"
+    - "mAP"
+    - "inference_time"
+    - "gpu_memory"
+    
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
+    update_freq: 100  # Steps
+    
+  wandb:
+    enabled: false  # Weights & Biases
+    project: "humanoid-vision"
+    entity: "your-team"
+    
+# Checkpointing
+checkpoint:
+  save_dir: "checkpoints"
+  filename_prefix: "model"
+  save_best_only: true
+  save_frequency: 1000  # Steps
+  max_checkpoints: 10
+  
+# Paths and Directories
+paths:
+  data_dir: "data"
+  models_dir: "models"
+  logs_dir: "logs"
+  exports_dir: "exports"
+  cache_dir: ".cache"
+  
+# Security and Privacy
+security:
+  encrypted_weights: false
+  model_signature_verification: true
+  input_sanitization: true
+  
+# Telemetry (Optional)
+telemetry:
+  enabled: false
+  endpoint: "https://telemetry.example.com"
+  send_frequency: 3600  # Seconds

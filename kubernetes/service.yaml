@@ -1,0 +1,90 @@
+# kubernetes/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-inference-service
+  namespace: robot-vision
+  labels:
+    app: vision-inference
+    component: service
+  annotations:
+    # Load balancer annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    
+    # Prometheus annotations
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    
+    # External DNS
+    external-dns.alpha.kubernetes.io/hostname: vision-api.robot.example.com
+spec:
+  selector:
+    app: vision-inference
+    component: detector
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  type: LoadBalancer
+  sessionAffinity: None
+  externalTrafficPolicy: Cluster
+  ipFamilyPolicy: SingleStack
+  ipFamilies:
+  - IPv4
+---
+# Internal service for cluster communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-inference-internal
+  namespace: robot-vision
+  labels:
+    app: vision-inference
+    component: internal-service
+spec:
+  selector:
+    app: vision-inference
+    component: detector
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  type: ClusterIP
+---
+# Headless service for StatefulSet (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-inference-headless
+  namespace: robot-vision
+  labels:
+    app: vision-inference
+    component: headless
+spec:
+  clusterIP: None
+  selector:
+    app: vision-inference
+    component: detector
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  - name: grpc
+    port: 50051
+    targetPort: 50051

@@ -1,0 +1,154 @@
+# docker/docker-compose.inference.yml
+version: '3.8'
+
+services:
+  inference-api:
+    build:
+      context: ../../
+      dockerfile: docker/Dockerfile.inference
+      target: production
+    image: humanoid-vision-inference:latest
+    container_name: vision-inference-api
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_PATH=/models/vision_model.pt
+      - CONFIG_PATH=/configs/inference.yaml
+      - LOG_LEVEL=INFO
+      - PORT=8000
+      - GRPC_PORT=50051
+      - WORKERS=2
+      - MAX_BATCH_SIZE=16
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    ports:
+      - "8000:8000"    # HTTP API
+      - "50051:50051"  # gRPC
+      - "9090:9090"    # Prometheus metrics
+    volumes:
+      - ../../models:/models:ro
+      - ../../configs:/configs:ro
+      - inference-logs:/app/logs
+      - inference-tmp:/tmp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  inference-worker:
+    build:
+      context: ../../
+      dockerfile: docker/Dockerfile.inference
+      target: production
+    image: humanoid-vision-inference:latest
+    container_name: vision-inference-worker
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+      - CUDA_VISIBLE_DEVICES=1
+      - MODEL_PATH=/models/vision_model.pt
+      - CONFIG_PATH=/configs/inference-worker.yaml
+      - LOG_LEVEL=INFO
+      - WORKER_TYPE=batch
+      - MAX_BATCH_SIZE=32
+      - BATCH_TIMEOUT=0.1
+    volumes:
+      - ../../models:/models:ro
+      - ../../configs:/configs:ro
+      - worker-logs:/app/logs
+      - inference-tmp:/tmp
+    depends_on:
+      - inference-api
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: vision-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: vision-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    depends_on:
+      - inference-api
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: vision-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana-datasources:/etc/grafana/provisioning/datasources
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: vision-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - inference-api
+    restart: unless-stopped
+
+volumes:
+  inference-logs:
+  worker-logs:
+  inference-tmp:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: vision-inference-network

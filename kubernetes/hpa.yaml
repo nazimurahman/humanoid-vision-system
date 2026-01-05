@@ -1,0 +1,130 @@
+# kubernetes/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vision-inference-hpa
+  namespace: robot-vision
+  labels:
+    app: vision-inference
+    component: autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hybrid-vision-inference
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  
+  # GPU utilization scaling (if GPU metrics available)
+  - type: Resource
+    resource:
+      name: nvidia.com/gpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  
+  # Custom metrics (requires Prometheus adapter)
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: 100
+  
+  - type: Pods
+    pods:
+      metric:
+        name: inference_latency_ms
+      target:
+        type: AverageValue
+        averageValue: 50
+  
+  # External metrics (from Prometheus)
+  - type: External
+    external:
+      metric:
+        name: queue_length
+        selector:
+          matchLabels:
+            queue: inference_queue
+      target:
+        type: AverageValue
+        averageValue: 100
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+    
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+    
+    # Scaling policies
+    policies:
+    - type: Pods
+      value: 2
+      periodSeconds: 60
+    
+    # Cooldown periods
+    scaleDown:
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 60
+---
+# Vertical Pod Autoscaler (if using VPA)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vision-inference-vpa
+  namespace: robot-vision
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: Deployment
+    name: hybrid-vision-inference
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: "*"
+      minAllowed:
+        cpu: "100m"
+        memory: "256Mi"
+        nvidia.com/gpu: "0"
+      maxAllowed:
+        cpu: "4"
+        memory: "16Gi"
+        nvidia.com/gpu: "1"
+      controlledResources: ["cpu", "memory", "nvidia.com/gpu"]

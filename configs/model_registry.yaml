@@ -1,0 +1,109 @@
+# configs/model_registry.yaml
+# Model registry and versioning configuration
+
+model_registry:
+  type: "mlflow"  # mlflow, wandb, custom
+  tracking_uri: "http://localhost:5000"
+  
+  # Model versioning
+  versioning:
+    strategy: "semantic"  # semantic, sequential
+    major: 1
+    minor: 0
+    patch: 0
+    
+  # Model metadata
+  metadata:
+    framework: "pytorch"
+    format: "torchscript"
+    quantization: "none"  # int8, fp16, none
+    opset_version: 13
+    
+  # Performance requirements
+  requirements:
+    min_mAP: 0.75
+    max_latency_ms: 50
+    min_precision: 0.8
+    min_recall: 0.7
+    
+  # Dependencies
+  dependencies:
+    pytorch: "1.13.1"
+    torchvision: "0.14.1"
+    cuda: "11.7"
+    
+  # Model cards
+  model_card:
+    enabled: true
+    template: "model_card_template.md"
+    sections:
+      - "model_details"
+      - "intended_use"
+      - "factors"
+      - "metrics"
+      - "evaluation_data"
+      - "training_data"
+      - "quantitative_analysis"
+      - "ethical_considerations"
+      - "caveats"
+      
+# Model serving
+model_serving:
+  framework: "torchserve"  # torchserve, triton, custom
+  max_batch_size: 32
+  max_wait_time_ms: 100
+  
+  # Model ensembles
+  ensembles:
+    enabled: false
+    models:
+      - name: "fast_model"
+        weight: 0.3
+      - name: "accurate_model"
+        weight: 0.7
+        
+# A/B testing
+ab_testing:
+  enabled: true
+  traffic_split: 0.5  # 50% to each model
+  
+  metrics:
+    - "mAP"
+    - "latency"
+    - "throughput"
+    - "user_satisfaction"
+    
+# Model monitoring
+model_monitoring:
+  drift_detection:
+    enabled: true
+    method: "ks_test"  # ks_test, psi, mmd
+    threshold: 0.05
+    window_size: 1000
+    
+  performance_degradation:
+    enabled: true
+    threshold: 0.1  # 10% degradation
+    check_interval: 3600  # seconds
+    
+# Model retraining
+retraining:
+  trigger:
+    - type: "performance"
+      threshold: 0.7
+    - type: "drift"
+      threshold: 0.05
+    - type: "schedule"
+      interval: "30d"
+      
+  data_collection:
+    enabled: true
+    storage: "data/retraining"
+    max_samples: 10000
+    
+# Model governance
+governance:
+  approval_workflow: true
+  required_approvals: 2
+  audit_trail: true
+  change_management: true

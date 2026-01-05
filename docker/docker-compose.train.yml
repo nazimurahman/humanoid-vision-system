@@ -1,0 +1,118 @@
+# docker/docker-compose.train.yml
+version: '3.8'
+
+services:
+  training:
+    build:
+      context: ../../
+      dockerfile: docker/Dockerfile.train
+      target: training
+    image: humanoid-vision-train:latest
+    container_name: vision-training
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - WANDB_PROJECT=humanoid-vision
+      - WANDB_ENTITY=${WANDB_ENTITY}
+      - TRAINING_CONFIG=configs/training.yaml
+      - DATA_DIR=/data
+      - LOG_DIR=/logs
+      - CHECKPOINT_DIR=/checkpoints
+    volumes:
+      - ../../data:/data
+      - ../../logs:/logs
+      - ../../checkpoints:/checkpoints
+      - ../../models:/models
+      - ../../tensorboard:/tensorboard
+      - ./configs:/app/configs:ro
+    ports:
+      - "6006:6006"  # TensorBoard
+      - "8080:8080"  # Training dashboard
+    command: >
+      python scripts/train.py
+      --config /app/configs/training.yaml
+      --data-dir /data
+      --log-dir /logs
+      --checkpoint-dir /checkpoints
+      --gpus 4
+      --epochs 100
+      --batch-size 32
+      --wandb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  tensorboard:
+    image: tensorflow/tensorflow:2.13.0
+    container_name: vision-tensorboard
+    command: tensorboard --logdir /tensorboard --host 0.0.0.0 --port 6006
+    ports:
+      - "6006:6006"
+    volumes:
+      - ../../tensorboard:/tensorboard
+    depends_on:
+      - training
+    restart: unless-stopped
+
+  jupyter:
+    build:
+      context: ../../
+      dockerfile: docker/Dockerfile.train
+    image: humanoid-vision-jupyter:latest
+    container_name: vision-jupyter
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-vision123}
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../../notebooks:/home/robot/app/notebooks
+      - ../../data:/home/robot/app/data
+      - ../../src:/home/robot/app/src
+    command: >
+      jupyter notebook
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --NotebookApp.token=${JUPYTER_TOKEN:-vision123}
+      --NotebookApp.password=''
+    depends_on:
+      - training
+
+  monitor:
+    image: grafana/grafana:10.1.0
+    container_name: vision-monitor
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+      - ../../monitoring/grafana:/var/lib/grafana
+    depends_on:
+      - training
+
+volumes:
+  data:
+  logs:
+  checkpoints:
+  models:
+
+networks:
+  default:
+    name: vision-training-network

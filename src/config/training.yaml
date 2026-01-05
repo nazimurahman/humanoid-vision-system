@@ -1,0 +1,91 @@
+# configs/training.yaml
+# Training configuration for MHC Vision System
+
+device: cuda  # or cpu
+
+model:
+  # Hybrid Vision System configuration
+  use_vit: true
+  use_rag: false
+  num_classes: 80
+  
+  # MHC Layer configuration
+  mhc:
+    expansion_rate: 4
+    sinkhorn_iterations: 20
+    sinkhorn_epsilon: 1e-8
+    use_mixed_precision: true
+
+data:
+  # Dataset paths
+  train_path: /data/coco/train2017
+  val_path: /data/coco/val2017
+  annotation_path: /data/coco/annotations
+  
+  # Image settings
+  image_size: 416
+  num_classes: 80
+  
+  # Augmentation
+  use_mosaic: true
+  use_mixup: true
+  color_jitter: 0.3
+  
+  # Data loading
+  batch_size: 16
+  num_workers: 8
+  max_train_samples: null  # Set to number for testing
+  max_val_samples: null
+
+training:
+  # Training parameters
+  epochs: 100
+  batch_size: 16
+  
+  # Optimization
+  learning_rate: 1e-3
+  weight_decay: 1e-4
+  warmup_epochs: 10
+  min_lr: 1e-6
+  
+  # MHC-specific optimization
+  mhc_optimizer:
+    mhc_lr_scale: 0.5
+    project_iterations: 20
+    strict_double_stochastic: true
+  
+  # Loss weights
+  lambda_coord: 5.0
+  lambda_obj: 1.0
+  lambda_noobj: 0.5
+  lambda_cls: 1.0
+  manifold_weight: 0.01
+  classification_weight: 0.5
+  
+  # Gradient handling
+  max_grad_norm: 1.0
+  mhc_max_norm: 0.5
+  use_mixed_precision: true
+  
+  # Stability monitoring
+  stability_check_interval: 100
+  max_eigenvalue: 1.1
+  sinkhorn_tolerance: 1e-4
+  
+  # Checkpointing
+  checkpoint_interval: 5
+  checkpoint_dir: checkpoints
+  early_stopping_patience: 20
+  
+  # YOLO anchors (COCO)
+  anchors:
+    small: [[10, 13], [16, 30], [33, 23]]
+    medium: [[30, 61], [62, 45], [59, 119]]
+    large: [[116, 90], [156, 198], [373, 326]]
+
+logging:
+  # Logging configuration
+  use_wandb: false
+  wandb_project: mhc-vision-system
+  log_dir: logs
+  save_stability_plots: true
